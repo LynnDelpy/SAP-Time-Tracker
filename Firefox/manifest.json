@@ -1,32 +1,41 @@
 {
-  "manifest_version": 2,
+  "manifest_version": 3,
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "{ca723ad6-f29f-4f9a-a1ad-7550a0a6b4eb}",
+      "data_collection_permissions": {
+        "required": ["browsingActivity"]
+      }
+    }
+  },
   "name": "SAP Time Tracker",
-  "version": "1.1",
-  "description": "Keeps track how much time you've wasted in SAP.",
+  "version": "2.0",
+  "description": "Tracks the time wasted in SAP S/4HANA while waiting for the busy indicator",
   "permissions": [
-    "storage",
-    "activeTab",
-    "tabs"
+    "storage"
+  ],
+  "host_permissions": [
+    "https://*/*",
+    "http://*/*"
   ],
   "background": {
-    "scripts": ["background.js"],
-    "persistent": false
+    "scripts": ["shared.js", "background.js"]
   },
   "content_scripts": [
     {
-      "matches": ["<all_urls>"],
-      "js": ["content.js"],
+      "matches": ["https://*/*", "http://*/*"],
+      "js": ["shared.js", "content-script.js"],
       "run_at": "document_idle"
     }
   ],
-  "browser_action": {
+  "action": {
     "default_popup": "popup.html",
-    "default_title": "SAP Time Tracker"
+    "default_title": "SAP Wasted Time Tracker"
   },
-  "web_accessible_resources": ["settings.html"],
+  "options_page": "settings.html",
   "icons": {
-  "16": "icon16.png",
-  "48": "icon48.png",
-  "128": "icon128.png"
+    "16": "icons/icon-16.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
   }
 }

@@ -1,32 +1,184 @@
-// Handles storage and communication for time tracking
+// Background service worker for the extension
 
-function getTodayKey() {
-  const today = new Date();
-  return `today_${today.getFullYear()}_${today.getMonth()+1}_${today.getDate()}`;
+importScripts('shared.js');
+
+let timerInterval = null;
+let isTimerRunning = false;
+let serverReachable = true; // session-only flag, checked on startup
+
+chrome.runtime.onInstalled.addListener(async () => {
+  const data = await chrome.storage.local.get(null);
+  if (data.lastReset !== undefined) return;
+
+  const initial = {
+    todaySeconds: 0,
+    totalSeconds: 0,
+    lastReset: new Date().toDateString(),
+    dailyData: {},
+    soundEnabled: false,
+    soundUrl: null
+  };
+
+  // Carry over stats and the music setting from SAP Time Tracker 1.x
+  if (typeof data.totalTime === 'number') {
+    Object.assign(initial, convertLegacyData(data), {
+      soundEnabled: !!data.playMusic,
+      soundUrl: data.musicDataUrl || null,
+      soundFileName: data.musicDataUrl ? 'SAP Time Tracker 1.x' : null
+    });
+  }
+
+  await chrome.storage.local.set(initial);
+
+  const legacyKeys = Object.keys(data).filter(key =>
+    key === 'totalTime' || key === 'playMusic' || key === 'musicDataUrl' || key.startsWith('today_'));
+  if (legacyKeys.length) await chrome.storage.local.remove(legacyKeys);
+});
+
+async function checkServerReachability() {
+  const data = await chrome.storage.local.get(['leaderboardEnabled', 'leaderboardServer']);
+  if (data.leaderboardEnabled === false) return;
+  const serverUrl = getLeaderboardServer(data.leaderboardServer);
+  if (!serverUrl) {
+    serverReachable = false;
+    return;
+  }
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 5000);
+    const res = await fetch(`${serverUrl}/health`, { signal: controller.signal });
+    clearTimeout(timer);
+    serverReachable = res.ok;
+  } catch (e) {
+    serverReachable = false;
+  }
 }
 
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message.type === 'addTime') {
-    chrome.storage.local.get(['totalTime', getTodayKey()], (result) => {
-      const newTotal = (result.totalTime || 0) + message.seconds;
-      const newToday = (result[getTodayKey()] || 0) + message.seconds;
-      let update = { totalTime: newTotal };
-      update[getTodayKey()] = newToday;
-      chrome.storage.local.set(update);
-      sendResponse({ success: true });
-    });
-    return true;
-  }
-  if (message.type === 'getTotalTime') {
-    chrome.storage.local.get(['totalTime'], (result) => {
-      sendResponse({ totalTime: result.totalTime || 0 });
-    });
-    return true;
-  }
-  if (message.type === 'getTodayTime') {
-    chrome.storage.local.get([getTodayKey()], (result) => {
-      sendResponse({ todayTime: result[getTodayKey()] || 0 });
-    });
-    return true;
+checkServerReachability();
+
+// Re-check when the leaderboard settings change so a newly entered server works without a restart
+chrome.storage.onChanged.addListener((changes) => {
+  if (changes.leaderboardServer || changes.leaderboardEnabled) checkServerReachability();
+});
+
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  if (request.action === 'loadingStarted') {
+    startTimer();
+  } else if (request.action === 'loadingStopped') {
+    stopTimer();
+  } else if (request.action === 'getServerStatus') {
+    sendResponse({ reachable: serverReachable });
   }
 });
+
+function startTimer() {
+  if (isTimerRunning) return;
+  isTimerRunning = true;
+
+  if (!timerInterval) {
+    timerInterval = setInterval(async () => {
+      const data = await chrome.storage.local.get(['todaySeconds', 'totalSeconds', 'lastReset', 'dailyData']);
+      let todaySeconds = data.todaySeconds || 0;
+      let totalSeconds = data.totalSeconds || 0;
+      let dailyData = data.dailyData || {};
+
+      const currentDate = new Date().toDateString();
+      if (currentDate !== data.lastReset) {
+        todaySeconds = 0;
+      }
+
+      todaySeconds++;
+      totalSeconds++;
+      dailyData[currentDate] = (dailyData[currentDate] || 0) + 1;
+
+      await chrome.storage.local.set({
+        todaySeconds,
+        totalSeconds,
+        lastReset: currentDate,
+        dailyData
+      });
+
+      chrome.action.setBadgeText({ text: formatTimeShort(todaySeconds) });
+      chrome.action.setBadgeBackgroundColor({ color: '#ff6b6b' });
+    }, 1000);
+  }
+}
+
+function stopTimer() {
+  if (timerInterval) {
+    clearInterval(timerInterval);
+    timerInterval = null;
+  }
+  isTimerRunning = false;
+  chrome.action.setBadgeText({ text: '' });
+  uploadStats();
+}
+
+async function uploadStats() {
+  if (!serverReachable) return;
+  const data = await chrome.storage.local.get([
+    'totalSeconds', 'todaySeconds', 'leaderboardEnabled', 'leaderboardUsername', 'leaderboardServer', 'lastUploadedUsername'
+  ]);
+  if (data.leaderboardEnabled === false) return;
+  const username = (data.leaderboardUsername || '').trim();
+  if (!username) return;
+  const serverUrl = getLeaderboardServer(data.leaderboardServer);
+  if (!serverUrl) return;
+
+  const lastUploaded = (data.lastUploadedUsername || '').trim();
+  if (lastUploaded && lastUploaded !== username) {
+    try {
+      await fetch(`${serverUrl}/api/user/${encodeURIComponent(lastUploaded)}`, { method: 'DELETE' });
+    } catch (e) {}
+  }
+
+  try {
+    const res = await fetch(`${serverUrl}/api/stats`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        username,
+        totalSeconds: data.totalSeconds || 0,
+        todaySeconds: data.todaySeconds || 0
+      })
+    });
+    if (res.ok) {
+      await chrome.storage.local.set({ lastUploadedUsername: username });
+    }
+  } catch (e) {}
+}
+
+// Periodic upload every 5 minutes while extension is active
+setInterval(uploadStats, 5 * 60 * 1000);
+
+// Polling fallback: catches cases where content script messages are lost
+setInterval(async () => {
+  const tabs = await chrome.tabs.query({ url: SAP_URL_PATTERNS });
+
+  if (tabs.length === 0) {
+    if (isTimerRunning) stopTimer();
+    return;
+  }
+
+  let anyVisible = false;
+  for (const tab of tabs) {
+    try {
+      const response = await chrome.tabs.sendMessage(tab.id, { action: 'getLoadingStatus' });
+      if (response?.isVisible) anyVisible = true;
+    } catch (e) {}
+  }
+
+  if (!anyVisible && isTimerRunning) {
+    stopTimer();
+  } else if (anyVisible && !isTimerRunning) {
+    startTimer();
+  }
+}, 2000);
+
+function formatTimeShort(seconds) {
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const secs = seconds % 60;
+  if (hours > 0) return `${hours}:${String(minutes).padStart(2, '0')}`;
+  return `${minutes}:${String(secs).padStart(2, '0')}`;
+}

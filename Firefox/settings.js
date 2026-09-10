@@ -1,88 +1,231 @@
-// Handles settings for custom URLs, selectors, and music
-const urlsEl = document.getElementById('urls');
-const selectorsEl = document.getElementById('selectors');
-const statusEl = document.getElementById('status');
-const musicToggle = document.getElementById('musicToggle');
-const musicFile = document.getElementById('musicFile');
+// Settings page script
+
+const languageSelect = document.getElementById('language');
+const soundEnabledCheckbox = document.getElementById('soundEnabled');
+const soundSettings = document.getElementById('soundSettings');
+const soundFileInput = document.getElementById('soundFile');
+const currentSoundDiv = document.getElementById('currentSound');
+const soundPreview = document.getElementById('soundPreview');
 const exportBtn = document.getElementById('exportBtn');
 const importBtn = document.getElementById('importBtn');
-const importFile = document.getElementById('importFile');
-let musicDataUrl = null;
+const importFileInput = document.getElementById('importFile');
+const resetAllBtn = document.getElementById('resetAllBtn');
+const messageDiv = document.getElementById('message');
 
-chrome.storage.local.get(['customUrls', 'customSelectors', 'playMusic', 'musicDataUrl'], (result) => {
-  urlsEl.value = (result.customUrls || []).join('\n');
-  selectorsEl.value = (result.customSelectors || []).join('\n');
-  musicToggle.checked = !!result.playMusic;
-  musicDataUrl = result.musicDataUrl || null;
+const leaderboardEnabledCheckbox = document.getElementById('leaderboardEnabled');
+const leaderboardUsernameInput = document.getElementById('leaderboardUsername');
+const leaderboardServerInput = document.getElementById('leaderboardServer');
+const saveLeaderboardBtn = document.getElementById('saveLeaderboardBtn');
+
+const customUrlsInput = document.getElementById('customUrls');
+const customSelectorsInput = document.getElementById('customSelectors');
+const saveDetectionBtn = document.getElementById('saveDetectionBtn');
+
+if (DEFAULT_LEADERBOARD_SERVER) leaderboardServerInput.placeholder = DEFAULT_LEADERBOARD_SERVER;
+customUrlsInput.placeholder = SAP_URL_PATTERNS.join('\n');
+customSelectorsInput.placeholder = SAP_SELECTORS.join('\n');
+
+// Load settings on page load
+window.addEventListener('DOMContentLoaded', () => initLanguage().then(loadSettings));
+
+async function loadSettings() {
+  const data = await browser.storage.local.get(['soundEnabled', 'soundUrl', 'soundFileName', 'leaderboardEnabled', 'leaderboardUsername', 'leaderboardServer', 'customUrls', 'customSelectors']);
+
+  languageSelect.value = currentLanguage;
+
+  soundEnabledCheckbox.checked = data.soundEnabled || false;
+  updateSoundSettings();
+
+  currentSoundDiv.textContent = data.soundFileName ? t('currentFile', { name: data.soundFileName }) : '';
+
+  if (data.soundUrl) {
+    soundPreview.src = data.soundUrl;
+    soundPreview.style.display = 'block';
+  }
+
+  leaderboardEnabledCheckbox.checked = data.leaderboardEnabled !== false;
+  leaderboardUsernameInput.value = data.leaderboardUsername || '';
+  leaderboardServerInput.value = data.leaderboardServer || '';
+
+  customUrlsInput.value = (data.customUrls || []).join('\n');
+  customSelectorsInput.value = (data.customSelectors || []).join('\n');
+}
+
+// Switch the page language right away
+languageSelect.addEventListener('change', async () => {
+  currentLanguage = languageSelect.value;
+  await browser.storage.local.set({ language: currentLanguage });
+  applyTranslations();
+  loadSettings();
+  showMessage(t('msgSettingsSaved'), 'success');
 });
 
-musicFile.addEventListener('change', (e) => {
+// Toggle sound settings visibility
+soundEnabledCheckbox.addEventListener('change', async () => {
+  await browser.storage.local.set({ soundEnabled: soundEnabledCheckbox.checked });
+  updateSoundSettings();
+  showMessage(t('msgSettingsSaved'), 'success');
+});
+
+function updateSoundSettings() {
+  if (soundEnabledCheckbox.checked) {
+    soundSettings.style.display = 'block';
+  } else {
+    soundSettings.style.display = 'none';
+  }
+}
+
+// Handle sound file selection
+soundFileInput.addEventListener('change', async (e) => {
   const file = e.target.files[0];
-  if (file) {
-    const reader = new FileReader();
-    reader.onload = function(evt) {
-      musicDataUrl = evt.target.result;
-    };
-    reader.readAsDataURL(file);
+  if (!file) return;
+
+  // Validate file is audio
+  if (!file.type.startsWith('audio/')) {
+    showMessage(t('msgChooseAudio'), 'error');
+    return;
   }
+
+  // Convert file to Data URL
+  const reader = new FileReader();
+  reader.onload = async (event) => {
+    const dataUrl = event.target.result;
+
+    await browser.storage.local.set({
+      soundUrl: dataUrl,
+      soundFileName: file.name
+    });
+
+    currentSoundDiv.textContent = t('currentFile', { name: file.name });
+    soundPreview.src = dataUrl;
+    soundPreview.style.display = 'block';
+    showMessage(t('msgSoundSaved'), 'success');
+  };
+
+  reader.readAsDataURL(file);
 });
 
-document.getElementById('settingsForm').addEventListener('submit', (e) => {
-  e.preventDefault();
-  const urls = urlsEl.value.split('\n').map(u => u.trim()).filter(u => u);
-  const selectors = selectorsEl.value.split('\n').map(s => s.trim()).filter(s => s);
-  const playMusic = musicToggle.checked;
-  const data = { customUrls: urls, customSelectors: selectors, playMusic };
-  if (musicDataUrl) {
-    data.musicDataUrl = musicDataUrl;
-  }
-  chrome.storage.local.set(data, () => {
-    statusEl.textContent = 'Settings saved!';
-    setTimeout(() => statusEl.textContent = '', 2000);
-  });
+// Export data
+exportBtn.addEventListener('click', async () => {
+  const data = await browser.storage.local.get(['todaySeconds', 'totalSeconds', 'lastReset', 'dailyData']);
+
+  const exportData = {
+    todaySeconds: data.todaySeconds || 0,
+    totalSeconds: data.totalSeconds || 0,
+    lastReset: data.lastReset || new Date().toDateString(),
+    dailyData: data.dailyData || {},
+    exportDate: new Date().toISOString()
+  };
+
+  const dataStr = JSON.stringify(exportData, null, 2);
+  const dataBlob = new Blob([dataStr], { type: 'application/json' });
+  const url = URL.createObjectURL(dataBlob);
+
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `sap-wasted-time-${new Date().toISOString().split('T')[0]}.json`;
+  link.click();
+
+  URL.revokeObjectURL(url);
+  showMessage(t('msgExported'), 'success');
 });
 
-exportBtn.addEventListener('click', () => {
-  chrome.storage.local.get(null, (data) => {
-    // Only export time-related keys
-    const exportData = {};
-    for (const key in data) {
-      if (key === 'totalTime' || key.startsWith('today_')) {
-        exportData[key] = data[key];
-      }
-    }
-    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'sap_time_data.json';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  });
-});
-
+// Import data
 importBtn.addEventListener('click', () => {
-  importFile.click();
+  importFileInput.click();
 });
 
-importFile.addEventListener('change', (e) => {
+importFileInput.addEventListener('change', async (e) => {
   const file = e.target.files[0];
-  if (file) {
-    const reader = new FileReader();
-    reader.onload = function(evt) {
-      try {
-        const importData = JSON.parse(evt.target.result);
-        chrome.storage.local.set(importData, () => {
-          statusEl.textContent = 'Time data imported!';
-          setTimeout(() => statusEl.textContent = '', 2000);
-        });
-      } catch {
-        statusEl.textContent = 'Invalid file!';
-        setTimeout(() => statusEl.textContent = '', 2000);
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = async (event) => {
+    try {
+      let importedData = JSON.parse(event.target.result);
+
+      // Accept exports from SAP Time Tracker 1.x
+      if (typeof importedData.totalTime === 'number') {
+        importedData = convertLegacyData(importedData);
       }
-    };
-    reader.readAsText(file);
+
+      // Validate imported data
+      if (typeof importedData.totalSeconds !== 'number' || typeof importedData.todaySeconds !== 'number') {
+        throw new Error(t('msgInvalidFormat'));
+      }
+
+      await browser.storage.local.set({
+        todaySeconds: importedData.todaySeconds,
+        totalSeconds: importedData.totalSeconds,
+        lastReset: importedData.lastReset || new Date().toDateString(),
+        dailyData: importedData.dailyData || {}
+      });
+
+      showMessage(t('msgImported'), 'success');
+      loadSettings();
+    } catch (err) {
+      showMessage(t('msgImportFailed', { error: err.message }), 'error');
+    }
+  };
+
+  reader.readAsText(file);
+  importFileInput.value = ''; // Reset input
+});
+
+// Reset all data
+resetAllBtn.addEventListener('click', async () => {
+  if (confirm(t('confirmDeleteAll'))) {
+    await browser.storage.local.set({
+      todaySeconds: 0,
+      totalSeconds: 0,
+      lastReset: new Date().toDateString(),
+      dailyData: {},
+      soundEnabled: false,
+      soundUrl: null,
+      soundFileName: null
+    });
+
+    currentSoundDiv.textContent = '';
+    soundPreview.style.display = 'none';
+    soundEnabledCheckbox.checked = false;
+    updateSoundSettings();
+
+    showMessage(t('msgAllDeleted'), 'success');
   }
 });
+
+// Leaderboard settings
+leaderboardEnabledCheckbox.addEventListener('change', async () => {
+  await browser.storage.local.set({ leaderboardEnabled: leaderboardEnabledCheckbox.checked });
+  showMessage(t('msgSaved'), 'success');
+});
+
+saveLeaderboardBtn.addEventListener('click', async () => {
+  await browser.storage.local.set({
+    leaderboardUsername: leaderboardUsernameInput.value.trim(),
+    leaderboardServer: leaderboardServerInput.value.trim()
+  });
+  showMessage(t('msgLeaderboardSaved'), 'success');
+});
+
+// Detection settings
+saveDetectionBtn.addEventListener('click', async () => {
+  await browser.storage.local.set({
+    customUrls: customUrlsInput.value.split('\n').map(u => u.trim()).filter(u => u),
+    customSelectors: customSelectorsInput.value.split('\n').map(s => s.trim()).filter(s => s)
+  });
+  showMessage(t('msgDetectionSaved'), 'success');
+});
+
+// Show message helper
+function showMessage(text, type) {
+  messageDiv.textContent = text;
+  messageDiv.style.display = 'block';
+  messageDiv.style.backgroundColor = type === 'success' ? '#d4edda' : '#f8d7da';
+  messageDiv.style.color = type === 'success' ? '#155724' : '#721c24';
+  messageDiv.style.border = `1px solid ${type === 'success' ? '#c3e6cb' : '#f5c6cb'}`;
+
+  setTimeout(() => {
+    messageDiv.style.display = 'none';
+  }, 3000);
+}

@@ -1,10 +1,15 @@
 {
   "manifest_version": 3,
   "name": "SAP Time Tracker",
-  "version": "1.2",
-  "description": "Keeps track how much time you've wasted in SAP.",
+  "version": "2.0",
+  "description": "Tracks the time wasted in SAP S/4HANA while waiting for the busy indicator",
   "permissions": [
     "storage"
+  ],
+  "host_permissions": [
+    "https://*.s4hana.ondemand.com/*",
+    "https://*/*",
+    "http://*/*"
   ],
   "background": {
     "service_worker": "background.js"
@@ -12,21 +17,18 @@
   "content_scripts": [
     {
       "matches": ["https://*.s4hana.ondemand.com/*"],
-      "js": ["content.js"],
+      "js": ["shared.js", "content-script.js"],
       "run_at": "document_idle"
     }
   ],
   "action": {
     "default_popup": "popup.html",
-    "default_title": "SAP Time Tracker"
+    "default_title": "SAP Wasted Time Tracker"
   },
-  "web_accessible_resources": [{
-    "resources": ["settings.html"],
-    "matches": ["https://*.s4hana.ondemand.com/*"]
-  }],
+  "options_page": "settings.html",
   "icons": {
-    "16": "icon16.png",
-    "48": "icon48.png",
-    "128": "icon128.png"
+    "16": "icons/icon-16.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
   }
 }
