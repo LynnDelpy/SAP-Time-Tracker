@@ -1,7 +1,9 @@
 // Background script for the extension
 
-let timerInterval = null;
-let isTimerRunning = false;
+let busyInterval = null;
+let busyRunning = false;
+let activeInterval = null;
+let activeRunning = false;
 let serverReachable = true; // session-only flag, checked on startup
 
 browser.runtime.onInstalled.addListener(async () => {
@@ -13,6 +15,10 @@ browser.runtime.onInstalled.addListener(async () => {
     totalSeconds: 0,
     lastReset: new Date().toDateString(),
     dailyData: {},
+    activeTodaySeconds: 0,
+    activeTotalSeconds: 0,
+    activeLastReset: new Date().toDateString(),
+    activeDailyData: {},
     soundEnabled: false,
     soundUrl: null
   };
@@ -60,21 +66,26 @@ browser.storage.onChanged.addListener((changes) => {
 });
 
 browser.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  if (request.action === 'loadingStarted') {
-    startTimer();
-  } else if (request.action === 'loadingStopped') {
-    stopTimer();
+  if (request.action === 'busyStarted') {
+    startBusyTimer();
+  } else if (request.action === 'busyStopped') {
+    stopBusyTimer();
+  } else if (request.action === 'activeStarted') {
+    startActiveTimer();
+  } else if (request.action === 'activeStopped') {
+    stopActiveTimer();
   } else if (request.action === 'getServerStatus') {
     sendResponse({ reachable: serverReachable });
   }
 });
 
-function startTimer() {
-  if (isTimerRunning) return;
-  isTimerRunning = true;
+// Timer for "wasted" time — counts while the busy indicator is on screen
+function startBusyTimer() {
+  if (busyRunning) return;
+  busyRunning = true;
 
-  if (!timerInterval) {
-    timerInterval = setInterval(async () => {
+  if (!busyInterval) {
+    busyInterval = setInterval(async () => {
       const data = await browser.storage.local.get(['todaySeconds', 'totalSeconds', 'lastReset', 'dailyData']);
       let todaySeconds = data.todaySeconds || 0;
       let totalSeconds = data.totalSeconds || 0;
@@ -102,13 +113,53 @@ function startTimer() {
   }
 }
 
-function stopTimer() {
-  if (timerInterval) {
-    clearInterval(timerInterval);
-    timerInterval = null;
+function stopBusyTimer() {
+  if (busyInterval) {
+    clearInterval(busyInterval);
+    busyInterval = null;
   }
-  isTimerRunning = false;
+  busyRunning = false;
   browser.action.setBadgeText({ text: '' });
+  uploadStats();
+}
+
+// Timer for total time — counts while an SAP tab is in the foreground
+function startActiveTimer() {
+  if (activeRunning) return;
+  activeRunning = true;
+
+  if (!activeInterval) {
+    activeInterval = setInterval(async () => {
+      const data = await browser.storage.local.get(['activeTodaySeconds', 'activeTotalSeconds', 'activeLastReset', 'activeDailyData']);
+      let activeTodaySeconds = data.activeTodaySeconds || 0;
+      let activeTotalSeconds = data.activeTotalSeconds || 0;
+      let activeDailyData = data.activeDailyData || {};
+
+      const currentDate = new Date().toDateString();
+      if (currentDate !== data.activeLastReset) {
+        activeTodaySeconds = 0;
+      }
+
+      activeTodaySeconds++;
+      activeTotalSeconds++;
+      activeDailyData[currentDate] = (activeDailyData[currentDate] || 0) + 1;
+
+      await browser.storage.local.set({
+        activeTodaySeconds,
+        activeTotalSeconds,
+        activeLastReset: currentDate,
+        activeDailyData
+      });
+    }, 1000);
+  }
+}
+
+function stopActiveTimer() {
+  if (activeInterval) {
+    clearInterval(activeInterval);
+    activeInterval = null;
+  }
+  activeRunning = false;
   uploadStats();
 }
 
@@ -153,19 +204,21 @@ setInterval(uploadStats, 5 * 60 * 1000);
 setInterval(async () => {
   const tabs = await browser.tabs.query({});
 
-  let anyVisible = false;
+  let anyBusy = false;
+  let anyActive = false;
   for (const tab of tabs) {
     try {
-      const response = await browser.tabs.sendMessage(tab.id, { action: 'getLoadingStatus' });
-      if (response?.isVisible) anyVisible = true;
+      const response = await browser.tabs.sendMessage(tab.id, { action: 'getStatus' });
+      if (response?.isBusy) anyBusy = true;
+      if (response?.isActive) anyActive = true;
     } catch (e) {}
   }
 
-  if (!anyVisible && isTimerRunning) {
-    stopTimer();
-  } else if (anyVisible && !isTimerRunning) {
-    startTimer();
-  }
+  if (anyBusy && !busyRunning) startBusyTimer();
+  else if (!anyBusy && busyRunning) stopBusyTimer();
+
+  if (anyActive && !activeRunning) startActiveTimer();
+  else if (!anyActive && activeRunning) stopActiveTimer();
 }, 2000);
 
 function formatTimeShort(seconds) {

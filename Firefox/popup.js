@@ -1,8 +1,10 @@
 let chartMeta = null;
 
 async function updateUI() {
-  const data = await browser.storage.local.get(['todaySeconds', 'totalSeconds', 'lastReset']);
+  const data = await browser.storage.local.get(['todaySeconds', 'totalSeconds', 'activeTodaySeconds', 'activeTotalSeconds']);
 
+  document.getElementById('activeTodayTime').textContent = formatTime(data.activeTodaySeconds || 0);
+  document.getElementById('activeTotalTime').textContent = formatTime(data.activeTotalSeconds || 0);
   document.getElementById('todayTime').textContent = formatTime(data.todaySeconds || 0);
   document.getElementById('totalTime').textContent = formatTime(data.totalSeconds || 0);
 
@@ -12,11 +14,11 @@ async function updateUI() {
   // Only tracked SAP pages run the content script, so an answer means we're on SAP
   let response = null;
   try {
-    response = await browser.tabs.sendMessage(currentTab.id, { action: 'getLoadingStatus' });
+    response = await browser.tabs.sendMessage(currentTab.id, { action: 'getStatus' });
   } catch (e) {}
 
   document.getElementById('statusText').textContent = t(response ? 'statusOnSap' : 'statusNotOnSap');
-  document.getElementById('loadingIndicator').style.display = response?.isVisible ? 'block' : 'none';
+  document.getElementById('loadingIndicator').style.display = response?.isBusy ? 'block' : 'none';
 }
 
 function formatYLabel(seconds) {
@@ -34,8 +36,9 @@ function formatTime(seconds) {
 }
 
 async function renderChart() {
-  const data = await browser.storage.local.get(['dailyData']);
-  const dailyData = data.dailyData || {};
+  const data = await browser.storage.local.get(['dailyData', 'activeDailyData']);
+  const metric = document.getElementById('metricSelect').value;
+  const dailyData = (metric === 'wasted' ? data.dailyData : data.activeDailyData) || {};
   const timespanValue = document.getElementById('timespanSelect').value;
 
   let dates = [];
@@ -253,7 +256,7 @@ document.getElementById('refreshLeaderboard').addEventListener('click', loadLead
 
 document.getElementById('resetTodayBtn').addEventListener('click', async () => {
   if (confirm(t('confirmResetToday'))) {
-    await browser.storage.local.set({ todaySeconds: 0 });
+    await browser.storage.local.set({ todaySeconds: 0, activeTodaySeconds: 0 });
     updateUI();
     renderChart();
   }
@@ -264,6 +267,7 @@ document.getElementById('settingsBtn').addEventListener('click', () => {
 });
 
 document.getElementById('timespanSelect').addEventListener('change', renderChart);
+document.getElementById('metricSelect').addEventListener('change', renderChart);
 
 async function checkUsernameBanner() {
   const data = await browser.storage.local.get(['leaderboardEnabled', 'leaderboardUsername', 'leaderboardBannerDismissed']);

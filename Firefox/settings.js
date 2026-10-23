@@ -107,13 +107,20 @@ soundFileInput.addEventListener('change', async (e) => {
 
 // Export data
 exportBtn.addEventListener('click', async () => {
-  const data = await browser.storage.local.get(['todaySeconds', 'totalSeconds', 'lastReset', 'dailyData']);
+  const data = await browser.storage.local.get([
+    'todaySeconds', 'totalSeconds', 'lastReset', 'dailyData',
+    'activeTodaySeconds', 'activeTotalSeconds', 'activeLastReset', 'activeDailyData'
+  ]);
 
   const exportData = {
     todaySeconds: data.todaySeconds || 0,
     totalSeconds: data.totalSeconds || 0,
     lastReset: data.lastReset || new Date().toDateString(),
     dailyData: data.dailyData || {},
+    activeTodaySeconds: data.activeTodaySeconds || 0,
+    activeTotalSeconds: data.activeTotalSeconds || 0,
+    activeLastReset: data.activeLastReset || new Date().toDateString(),
+    activeDailyData: data.activeDailyData || {},
     exportDate: new Date().toISOString()
   };
 
@@ -158,7 +165,11 @@ importFileInput.addEventListener('change', async (e) => {
         todaySeconds: importedData.todaySeconds,
         totalSeconds: importedData.totalSeconds,
         lastReset: importedData.lastReset || new Date().toDateString(),
-        dailyData: importedData.dailyData || {}
+        dailyData: importedData.dailyData || {},
+        activeTodaySeconds: importedData.activeTodaySeconds || 0,
+        activeTotalSeconds: importedData.activeTotalSeconds || 0,
+        activeLastReset: importedData.activeLastReset || new Date().toDateString(),
+        activeDailyData: importedData.activeDailyData || {}
       });
 
       showMessage(t('msgImported'), 'success');
@@ -180,6 +191,10 @@ resetAllBtn.addEventListener('click', async () => {
       totalSeconds: 0,
       lastReset: new Date().toDateString(),
       dailyData: {},
+      activeTodaySeconds: 0,
+      activeTotalSeconds: 0,
+      activeLastReset: new Date().toDateString(),
+      activeDailyData: {},
       soundEnabled: false,
       soundUrl: null,
       soundFileName: null
