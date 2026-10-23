@@ -7,7 +7,7 @@
     "storage"
   ],
   "host_permissions": [
-    "https://*.s4hana.ondemand.com/*",
+    "https://*.s4hana.cloud.sap/*",
     "https://*/*",
     "http://*/*"
   ],
@@ -16,7 +16,7 @@
   },
   "content_scripts": [
     {
-      "matches": ["https://*.s4hana.ondemand.com/*"],
+      "matches": ["https://*.s4hana.cloud.sap/*"],
       "js": ["shared.js", "content-script.js"],
       "run_at": "document_idle"
     }
