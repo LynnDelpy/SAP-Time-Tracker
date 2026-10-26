@@ -1,6 +1,7 @@
 // Content script that runs on SAP S/4HANA pages (or the custom URLs set in Settings)
 
-let wasVisible = false;
+let wasBusy = false;
+let wasActive = false;
 let audioElement = null;
 
 function urlMatches(url, patterns) {
@@ -24,6 +25,12 @@ function isBusyIndicatorVisible(selectors) {
   return false;
 }
 
+// The page counts as active while this tab is in the foreground (visible and not minimized).
+// This is what drives the total "time on SAP" counter.
+function isPageActive() {
+  return document.visibilityState === 'visible';
+}
+
 async function playNotificationSound() {
   const data = await browser.storage.local.get(['soundUrl', 'soundEnabled']);
   if (!data.soundEnabled || !data.soundUrl) return;
@@ -41,29 +48,45 @@ browser.storage.local.get(['customUrls', 'customSelectors']).then((result) => {
   if (!urlMatches(window.location.href, urlPatterns)) return;
 
   function checkAndNotify() {
+    // Busy indicator → "wasted" time spent waiting
     if (isBusyIndicatorVisible(selectors)) {
-      if (!wasVisible) {
-        wasVisible = true;
+      if (!wasBusy) {
+        wasBusy = true;
         playNotificationSound();
       }
-      // Resend loadingStarted every tick while visible so a missed message doesn't
+      // Resend busyStarted every tick while visible so a missed message doesn't
       // leave the timer stopped and the background script gets a keep-alive ping.
-      browser.runtime.sendMessage({ action: 'loadingStarted' }).catch(() => {});
-    } else if (wasVisible) {
-      wasVisible = false;
-      browser.runtime.sendMessage({ action: 'loadingStopped' }).catch(() => {});
+      browser.runtime.sendMessage({ action: 'busyStarted' }).catch(() => {});
+    } else if (wasBusy) {
+      wasBusy = false;
+      browser.runtime.sendMessage({ action: 'busyStopped' }).catch(() => {});
+    }
+
+    // Foreground page → total time spent on SAP
+    if (isPageActive()) {
+      wasActive = true;
+      browser.runtime.sendMessage({ action: 'activeStarted' }).catch(() => {});
+    } else if (wasActive) {
+      wasActive = false;
+      browser.runtime.sendMessage({ action: 'activeStopped' }).catch(() => {});
     }
   }
 
   browser.runtime.onMessage.addListener((request, sender, sendResponse) => {
-    if (request.action === 'getLoadingStatus') {
-      sendResponse({ isVisible: isBusyIndicatorVisible(selectors) });
+    if (request.action === 'getStatus') {
+      sendResponse({ isBusy: isBusyIndicatorVisible(selectors), isActive: isPageActive() });
     }
   });
 
+  // React immediately when the user switches to or away from this tab
+  document.addEventListener('visibilitychange', checkAndNotify);
+
   window.addEventListener('beforeunload', () => {
-    if (wasVisible) {
-      browser.runtime.sendMessage({ action: 'loadingStopped' }).catch(() => {});
+    if (wasBusy) {
+      browser.runtime.sendMessage({ action: 'busyStopped' }).catch(() => {});
+    }
+    if (wasActive) {
+      browser.runtime.sendMessage({ action: 'activeStopped' }).catch(() => {});
     }
   });
 

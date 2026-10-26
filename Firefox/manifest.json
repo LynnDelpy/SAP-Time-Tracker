@@ -9,8 +9,8 @@
     }
   },
   "name": "SAP Time Tracker",
-  "version": "2.0",
-  "description": "Tracks the time wasted in SAP S/4HANA while waiting for the busy indicator",
+  "version": "2.1",
+  "description": "Tracks your total time in SAP S/4HANA, plus the time wasted waiting for the busy indicator",
   "permissions": [
     "storage"
   ],

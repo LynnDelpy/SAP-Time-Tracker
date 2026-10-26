@@ -1,8 +1,8 @@
 # SAP Wasted Time Tracker
 
-A browser extension that tracks the time wasted waiting for the busy indicator in SAP S/4HANA.
+A browser extension that tracks your total time in SAP S/4HANA, and separately the time wasted waiting for the busy indicator.
 
-By default all S/4HANA Public Cloud systems (`*.s4hana.ondemand.com`) work.
+By default all S/4HANA Public Cloud systems work, both the current domain (`*.s4hana.cloud.sap`) and the older one (`*.s4hana.ondemand.com`).
 
 ## Download
 
@@ -12,13 +12,16 @@ By default all S/4HANA Public Cloud systems (`*.s4hana.ondemand.com`) work.
 ## Features
 
 ### Time Tracking
-- Automatically starts and stops the timer when the SAP busy indicator is visible
-- **Wasted Time Today** — resets at midnight
-- **Wasted Time Total** — cumulative since installation
-- Live badge on the extension icon showing the current session time
+Two independent counters run while you are on an S/4HANA page:
+
+- **Time on SAP** — counts every second the S/4HANA tab is in the foreground (visible). This is your total time spent in the system.
+- **Wasted Time** — counts only the seconds the SAP busy indicator is on screen, i.e. the time you spend waiting.
+
+Each counter keeps a **Today** value (resets at midnight) and a **Total** value (cumulative since installation). Wasted time is always a subset of your total time on SAP. A live badge on the extension icon shows the current wasted session time.
 
 ### Statistics Dashboard
-- Bar chart in the popup showing daily wasted time
+- Bar chart in the popup showing daily time
+- Metric selector: switch the chart between **On SAP** (total) and **Wasted**
 - Hover over a bar to see the exact time for that day
 - Timespan selector: Last 7 days, 14 days, 30 days, Last year, All time
 - Today's bar is highlighted in orange
@@ -40,8 +43,8 @@ By default all S/4HANA Public Cloud systems (`*.s4hana.ondemand.com`) work.
 
 ## Usage
 
-1. Open any `*.s4hana.ondemand.com` page
-2. The timer starts automatically when the busy indicator appears and stops when it disappears
+1. Open any `*.s4hana.cloud.sap` or `*.s4hana.ondemand.com` page
+2. The **Time on SAP** counter runs while the tab is in the foreground; the **Wasted Time** counter runs while the busy indicator is visible
 3. Click the extension icon to see your stats, the daily chart, and the leaderboard
 4. Open **⚙️ Settings** to configure sound notifications, your leaderboard name, or data management
 
@@ -76,6 +79,11 @@ The extension checks every second whether the SAP busy indicator is rendered:
 - `.sapUiLocalBusyIndicatorAnimation.sapUiLocalBusyIndicatorAnimStandard`
 
 ## Changelog
+
+### v2.1
+- Added total **Time on SAP** tracking (counts while the S/4HANA tab is in the foreground), alongside the existing wasted-time counter
+- Chart metric selector to switch between On SAP and Wasted time
+- Fixed detection on the current S/4HANA domain `*.s4hana.cloud.sap`; both `cloud.sap` and `ondemand.com` are now tracked out of the box
 
 ### v2.0
 - Rebuilt on the [Dynamics Wasted Time Tracker](https://github.com/Nyyks/dynamics-wasted-time) codebase

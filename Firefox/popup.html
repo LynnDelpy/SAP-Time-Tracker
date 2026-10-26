@@ -16,6 +16,16 @@
     </div>
 
     <div class="stats">
+      <div class="stat-box stat-active">
+        <h2 data-i18n="todayOnSapLabel">Time on SAP Today</h2>
+        <p class="time" id="activeTodayTime">00:00:00</p>
+      </div>
+
+      <div class="stat-box stat-active">
+        <h2 data-i18n="totalOnSapLabel">Time on SAP Total</h2>
+        <p class="time" id="activeTotalTime">00:00:00</p>
+      </div>
+
       <div class="stat-box">
         <h2 data-i18n="todayLabel">Wasted Time Today</h2>
         <p class="time" id="todayTime">00:00:00</p>
@@ -35,6 +45,10 @@
     <div class="chart-section">
       <div class="chart-header">
         <h2 data-i18n="dailyStats">Daily Stats</h2>
+        <select id="metricSelect" class="timespan-select">
+          <option value="active" data-i18n="metricOnSap">On SAP</option>
+          <option value="wasted" data-i18n="metricWasted">Wasted</option>
+        </select>
         <select id="timespanSelect" class="timespan-select">
           <option value="7" data-i18n="last7Days">Last 7 days</option>
           <option value="14" data-i18n="last14Days">Last 14 days</option>

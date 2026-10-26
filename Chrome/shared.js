@@ -1,7 +1,11 @@
 // Settings and helpers shared by the background, content, popup and settings scripts
 
-// Pages the tracker runs on
-const SAP_URL_PATTERNS = ['https://*.s4hana.ondemand.com/*'];
+// Pages the tracker runs on. Covers both the current S/4HANA Public Cloud
+// domain (*.s4hana.cloud.sap) and the older one (*.s4hana.ondemand.com).
+const SAP_URL_PATTERNS = [
+  'https://*.s4hana.cloud.sap/*',
+  'https://*.s4hana.ondemand.com/*'
+];
 
 // The SAP busy indicator — time is counted while one of these is visible
 const SAP_SELECTORS = ['.sapUiLocalBusyIndicatorAnimation.sapUiLocalBusyIndicatorAnimStandard'];

@@ -43,11 +43,17 @@ h2 {
 }
 
 .stat-box {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, #ff6b6b 0%, #ee5253 100%);
   border-radius: 8px;
   padding: 12px;
   text-align: center;
   color: white;
+  box-shadow: 0 4px 6px rgba(238, 82, 83, 0.4);
+}
+
+/* Total "time on SAP" boxes are the primary metric */
+.stat-box.stat-active {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   box-shadow: 0 4px 6px rgba(102, 126, 234, 0.4);
 }
 
