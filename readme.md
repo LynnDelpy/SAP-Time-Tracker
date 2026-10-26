@@ -6,9 +6,7 @@ By default all S/4HANA Public Cloud systems work, both the current domain (`*.s4
 
 ## Download
 
-- **Firefox**: https://addons.mozilla.org/de/firefox/addon/sap-time-tracker/
-- **Chrome / Edge**: https://chromewebstore.google.com/detail/sap-time-tracker/mojlhimcfdjepgcfablifakkdemanbik
-
+Download this folder. Unzip and load the folder with your browser engine via your exstension page into your browser
 ## Features
 
 ### Time Tracking
